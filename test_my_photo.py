@@ -6,10 +6,10 @@ import torch
 from torch import nn
 from torchvision import transforms
 
-from tools.config import TEST_SOTS_ROOT, OHAZE_ROOT, HAZERD_ROOT
+from tools.config import TEST_SOTS_ROOT, OHAZE_ROOT, MYHAZE_ROOT
 from tools.utils import AvgMeter, check_mkdir, sliding_forward
 from model import DM2FNet, DM2FNet_woPhy
-from datasets import SotsDataset, OHazeDataset, HazeRDDataset
+from datasets import SotsDataset, OHazeDataset, MyHazeDataset
 from torch.utils.data import DataLoader
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 
@@ -23,13 +23,15 @@ exp_name = 'RESIDE_ITS'
 # exp_name = 'O-Haze'
 
 args = {
+    # 'snapshot': 'iter_40000_loss_0.01230_lr_0.000000',
+    # 'snapshot': 'iter_19000_loss_0.04261_lr_0.000014',
     'snapshot': 'iter_40000_loss_0.01170_lr_0.000000',
 }
 
 to_test = {
     # 'SOTS': TEST_SOTS_ROOT,
     # 'O-Haze': OHAZE_ROOT,
-    'HazeRD': HAZERD_ROOT,
+    'MyHaze': MYHAZE_ROOT,
 }
 
 to_pil = transforms.ToPILImage()
@@ -45,10 +47,10 @@ def main():
                 dataset = SotsDataset(root)
             elif 'O-Haze' in name:
                 net = DM2FNet_woPhy().cuda()
-                dataset = OHazeDataset(root, 'test')
-            elif 'HazeRD' in name:
+                dataset = OHazeDataset(root, '')
+            elif 'MyHaze' in name:
                 net = DM2FNet().cuda()
-                dataset = HazeRDDataset(root)
+                dataset = MyHazeDataset(root)
             else:
                 raise NotImplementedError
 
@@ -66,7 +68,7 @@ def main():
 
             for idx, data in enumerate(dataloader):
                 # haze_image, _, _, _, fs = data
-                haze, gts, fs = data
+                haze, fs = data
                 # print(haze.shape, gts.shape)
 
                 check_mkdir(os.path.join(ckpt_path, exp_name,
@@ -79,19 +81,19 @@ def main():
                 else:
                     res = net(haze).detach()
 
-                loss = criterion(res, gts.cuda())
-                loss_record.update(loss.item(), haze.size(0))
+                # loss = criterion(res, gts.cuda())
+                # loss_record.update(loss.item(), haze.size(0))
 
-                for i in range(len(fs)):
-                    r = res[i].cpu().numpy().transpose([1, 2, 0])
-                    gt = gts[i].cpu().numpy().transpose([1, 2, 0])
-                    psnr = peak_signal_noise_ratio(gt, r)
-                    psnrs.append(psnr)
-                    ssim = structural_similarity(gt, r, data_range=1, multichannel=True,
-                                                 gaussian_weights=True, sigma=1.5, use_sample_covariance=False, channel_axis=2)
-                    ssims.append(ssim)
-                    print('predicting for {} ({}/{}) [{}]: PSNR {:.4f}, SSIM {:.4f}'
-                          .format(name, idx + 1, len(dataloader), fs[i], psnr, ssim))
+                # for i in range(len(fs)):
+                #     r = res[i].cpu().numpy().transpose([1, 2, 0])
+                #     gt = gts[i].cpu().numpy().transpose([1, 2, 0])
+                #     psnr = peak_signal_noise_ratio(gt, r)
+                #     psnrs.append(psnr)
+                #     ssim = structural_similarity(gt, r, data_range=1, multichannel=True,
+                #                                  gaussian_weights=True, sigma=1.5, use_sample_covariance=False, channel_axis=2)
+                #     ssims.append(ssim)
+                #     print('predicting for {} ({}/{}) [{}]: PSNR {:.4f}, SSIM {:.4f}'
+                #           .format(name, idx + 1, len(dataloader), fs[i], psnr, ssim))
 
                 for r, f in zip(res.cpu(), fs):
                     to_pil(r).save(

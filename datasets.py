@@ -254,6 +254,51 @@ class SotsDataset(data.Dataset):
         return len(self.imgs)
 
 
+class HazeRDDataset(data.Dataset):
+    def __init__(self, root, mode=None):
+        self.root = root
+        self.imgs = [(os.path.join(root, 'hazy', img_name),
+                    os.path.join(root, 'gt', img_name))
+                    for img_name in os.listdir(os.path.join(root, 'hazy'))]
+        self.mode = mode
+
+    def __getitem__(self, index):
+        haze_path, gt_path = self.imgs[index]
+        name = os.path.splitext(os.path.split(haze_path)[1])[0]
+
+        haze = Image.open(haze_path).convert('RGB')
+        haze = to_tensor(haze)
+
+        idx0 = name.split('_')[0]
+        idx1 = name.split('_')[1]
+        gt = Image.open(os.path.join(self.root, 'gt', idx0 + '_' + idx1 + '_RGB.jpg')).convert('RGB')
+        gt = to_tensor(gt)
+        return haze, gt, name
+
+    def __len__(self):
+        return len(self.imgs)
+
+
+class MyHazeDataset(data.Dataset):
+    def __init__(self, root, mode=None):
+        self.root = root
+        self.imgs = [os.path.join(root, img_name)
+                    for img_name in os.listdir(os.path.join(root))]
+        self.mode = mode
+
+    def __getitem__(self, index):
+        haze_path = self.imgs[index]
+        name = os.path.splitext(os.path.split(haze_path)[1])[0]
+
+        haze = Image.open(haze_path).convert('RGB')
+        haze = to_tensor(haze)
+
+        return haze, name
+
+    def __len__(self):
+        return len(self.imgs)
+
+
 class OHazeDataset(data.Dataset):
     def __init__(self, root, mode):
         self.root = root
