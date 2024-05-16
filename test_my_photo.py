@@ -23,8 +23,13 @@ exp_name = 'RESIDE_ITS'
 # exp_name = 'O-Haze'
 
 args = {
-    # 'snapshot': 'iter_40000_loss_0.01230_lr_0.000000',
-    # 'snapshot': 'iter_19000_loss_0.04261_lr_0.000014',
+    # 'snapshot': 'iter_5000_loss_0.02125_lr_0.000443',
+    # 'snapshot': 'iter_10000_loss_0.03119_lr_0.000386',
+    # 'snapshot': 'iter_15000_loss_0.01642_lr_0.000328',
+    # 'snapshot': 'iter_20000_loss_0.01551_lr_0.000268',
+    # 'snapshot': 'iter_25000_loss_0.01520_lr_0.000207',
+    # 'snapshot': 'iter_30000_loss_0.01328_lr_0.000144',
+    # 'snapshot': 'iter_35000_loss_0.01285_lr_0.000077',
     'snapshot': 'iter_40000_loss_0.01170_lr_0.000000',
 }
 
@@ -81,26 +86,10 @@ def main():
                 else:
                     res = net(haze).detach()
 
-                # loss = criterion(res, gts.cuda())
-                # loss_record.update(loss.item(), haze.size(0))
-
-                # for i in range(len(fs)):
-                #     r = res[i].cpu().numpy().transpose([1, 2, 0])
-                #     gt = gts[i].cpu().numpy().transpose([1, 2, 0])
-                #     psnr = peak_signal_noise_ratio(gt, r)
-                #     psnrs.append(psnr)
-                #     ssim = structural_similarity(gt, r, data_range=1, multichannel=True,
-                #                                  gaussian_weights=True, sigma=1.5, use_sample_covariance=False, channel_axis=2)
-                #     ssims.append(ssim)
-                #     print('predicting for {} ({}/{}) [{}]: PSNR {:.4f}, SSIM {:.4f}'
-                #           .format(name, idx + 1, len(dataloader), fs[i], psnr, ssim))
-
                 for r, f in zip(res.cpu(), fs):
                     to_pil(r).save(
                         os.path.join(ckpt_path, exp_name,
                                      '(%s) %s_%s' % (exp_name, name, args['snapshot']), '%s.png' % f))
-
-            print(f"[{name}] L1: {loss_record.avg:.6f}, PSNR: {np.mean(psnrs):.6f}, SSIM: {np.mean(ssims):.6f}")
 
 
 if __name__ == '__main__':
