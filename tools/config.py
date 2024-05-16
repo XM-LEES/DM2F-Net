@@ -9,7 +9,7 @@ root = osp.dirname(osp.abspath(__file__))
 # TEST_B_ROOT = os.path.join(root, 'nature')
 
 # O-Haze
-OHAZE_ROOT = osp.abspath(osp.join(root, '../data', 'O-Haze'))
+OHAZE_ROOT = osp.abspath(osp.join(root, '../data', '# O-HAZY NTIRE 2018'))
 
 # RESIDE
 TRAIN_ITS_ROOT = osp.abspath(osp.join(root, '../data', 'RESIDE', 'ITS_v2'))  # ITS
