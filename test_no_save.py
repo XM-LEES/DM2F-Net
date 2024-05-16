@@ -28,11 +28,11 @@ args = {
     # 'snapshot': 'iter_5000_loss_0.02125_lr_0.000443',
     # 'snapshot': 'iter_10000_loss_0.03119_lr_0.000386',
     # 'snapshot': 'iter_15000_loss_0.01642_lr_0.000328',
-    # 'snapshot': 'iter_20000_loss_0.01551_lr_0.000268',
+    'snapshot': 'iter_20000_loss_0.01551_lr_0.000268',
     # 'snapshot': 'iter_25000_loss_0.01520_lr_0.000207',
     # 'snapshot': 'iter_30000_loss_0.01328_lr_0.000144',
     # 'snapshot': 'iter_35000_loss_0.01285_lr_0.000077',
-    'snapshot': 'iter_40000_loss_0.01170_lr_0.000000',
+    # 'snapshot': 'iter_40000_loss_0.01170_lr_0.000000',
 }
 
 to_test = {
