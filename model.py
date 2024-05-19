@@ -758,6 +758,18 @@ class DM2FNet(Base):
             nn.Conv2d(num_features, 1, kernel_size=1), nn.Sigmoid()
         )
 
+
+        self.t_iter = nn.Sequential(
+            nn.Conv2d(num_features * 2 + 1, num_features, kernel_size=3, padding=1), nn.SELU(),
+            nn.Conv2d(num_features, 1, kernel_size=1), nn.Sigmoid()
+        )
+        self.a_iter = nn.Sequential(
+            nn.AdaptiveAvgPool2d(1),
+            nn.Conv2d(num_features * 2 + 1, num_features, kernel_size=1), nn.SELU(),
+            nn.Conv2d(num_features, num_features, kernel_size=1), nn.SELU(),
+            nn.Conv2d(num_features, 1, kernel_size=1), nn.Sigmoid()
+        )
+
         self.attention_phy = nn.Sequential(
             nn.Conv2d(num_features * 4, num_features, kernel_size=3, padding=1), nn.SELU(),
             nn.Conv2d(num_features, num_features, kernel_size=3, padding=1), nn.SELU(),
@@ -807,6 +819,25 @@ class DM2FNet(Base):
             nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
             nn.Conv2d(num_features // 2, 3, kernel_size=1)
         )
+
+
+        self.j1_iter = nn.Sequential(
+            nn.Conv2d(num_features * 2, num_features, kernel_size=3, padding=1), nn.SELU(),
+            nn.Conv2d(num_features, 3, kernel_size=1)
+        )
+        self.j2_iter = nn.Sequential(
+            nn.Conv2d(num_features * 2, num_features, kernel_size=3, padding=1), nn.SELU(),
+            nn.Conv2d(num_features, 3, kernel_size=1)
+        )
+        self.j3_iter = nn.Sequential(
+            nn.Conv2d(num_features * 2, num_features, kernel_size=3, padding=1), nn.SELU(),
+            nn.Conv2d(num_features, 3, kernel_size=1)
+        )
+        self.j4_iter = nn.Sequential(
+            nn.Conv2d(num_features * 2, num_features, kernel_size=3, padding=1), nn.SELU(),
+            nn.Conv2d(num_features, 3, kernel_size=1)
+        )
+
 
         self.attention_fusion = nn.Sequential(
             nn.Conv2d(num_features * 4, num_features, kernel_size=1), nn.SELU(),
@@ -891,41 +922,107 @@ class DM2FNet(Base):
         log_log_x0_inverse = torch.log(torch.log(1 / x0.clamp(min=1e-8, max=(1 - 1e-8))))
 
         # J0 = (I - A0 * (1 - T0)) / T0
-        a = self.a(f_phy)
-        t = F.upsample(self.t(f_phy), size=x0.size()[2:], mode='bilinear')
-        x_phy = ((x0 - a * (1 - t)) / t.clamp(min=1e-8)).clamp(min=0., max=1.)
+        # Iter1
+        a_iter1 = self.a(f_phy)
+        t_iter1 = self.t(f_phy)
+        t = F.upsample(t_iter1, size=x0.size()[2:], mode='bilinear')
+        x_phy_iter1 = ((x0 - a_iter1 * (1 - t)) / t.clamp(min=1e-8)).clamp(min=0., max=1.)
+        # Iter2
+        f_phy_t_j = torch.cat((f_phy, t_iter1.detach().clone(), x_phy_iter1.detach().clone()), dim=1)
+        a_iter2 = self.a_iter(f_phy_t_j)
+        t_iter2 = self.t_iter(f_phy_t_j)
+        t = F.upsample(t_iter2, size=x0.size()[2:], mode='bilinear')
+        x_phy_iter2 = ((x0 - a_iter2 * (1 - t)) / t.clamp(min=1e-8)).clamp(min=0., max=1.)
+        # Iter3
+        f_phy_t_j = torch.cat((f_phy, t_iter1.detach().clone(), x_phy_iter2.detach().clone()), dim=1)
+        a_iter3 = self.a_iter(f_phy_t_j)
+        t_iter3 = self.t_iter(f_phy_t_j)
+        t = F.upsample(t_iter3, size=x0.size()[2:], mode='bilinear')
+        x_phy_iter3 = ((x0 - a_iter3 * (1 - t)) / t.clamp(min=1e-8)).clamp(min=0., max=1.)
+
 
         # J2 = I * exp(R2)
-        r1 = F.upsample(self.j1(f1), size=x0.size()[2:], mode='bilinear')
-        x_j1 = torch.exp(log_x0 + r1).clamp(min=0., max=1.)
+        # Iter1
+        r1_iter1 = self.j1(f1)
+        r1 = F.upsample(r1_iter1, size=x0.size()[2:], mode='bilinear')
+        x_j1_iter1 = torch.exp(log_x0 + r1).clamp(min=0., max=1.)
+        # Iter2
+        f1_t_j = torch.cat((f1, r1_iter1.detach().clone(), x_j1_iter1.detach().clone()), dim=1)
+        r1_iter2 = self.j1_iter(f1_t_j)
+        r1 = F.upsample(r1_iter2, size=x0.size()[2:], mode='bilinear')
+        x_j1_iter2 = torch.exp(log_x0 + r1).clamp(min=0., max=1.)
+        # Iter3
+        f1_t_j = torch.cat((f1, r1_iter2.detach().clone(), x_j1_iter2.detach().clone()), dim=1)
+        r1_iter3 = self.j1_iter(f1_t_j)
+        r1 = F.upsample(r1_iter3, size=x0.size()[2:], mode='bilinear')
+        x_j1_iter3 = torch.exp(log_x0 + r1).clamp(min=0., max=1.)
+
 
         # J2 = I + R2
-        r2 = F.upsample(self.j2(f2), size=x0.size()[2:], mode='bilinear')
-        x_j2 = ((x + r2) * self.std + self.mean).clamp(min=0., max=1.)
+        # Iter1
+        r2_iter1 = self.j2(f2)
+        r2 = F.upsample(r2_iter1, size=x0.size()[2:], mode='bilinear')
+        x_j2_iter1 = ((x + r2) * self.std + self.mean).clamp(min=0., max=1.)
+        # Iter2
+        f2_t_j = torch.cat((f2, r2_iter1.detach().clone(), x_j2_iter1.detach().clone()), dim=1)
+        r2_iter2 = self.j2_iter(f2_t_j)
+        r2 = F.upsample(r2_iter2, size=x0.size()[2:], mode='bilinear')
+        x_j2_iter2 = ((x + r2) * self.std + self.mean).clamp(min=0., max=1.)
+        # Iter3
+        f2_t_j = torch.cat((f2, r2_iter2.detach().clone(), x_j2_iter2.detach().clone()), dim=1)
+        r2_iter3 = self.j2_iter(f2_t_j)
+        r2 = F.upsample(r2_iter3, size=x0.size()[2:], mode='bilinear')
+        x_j2_iter3 = ((x + r2) * self.std + self.mean).clamp(min=0., max=1.)
 
-        #
-        r3 = F.upsample(self.j3(f3), size=x0.size()[2:], mode='bilinear')
-        x_j3 = torch.exp(-torch.exp(log_log_x0_inverse + r3)).clamp(min=0., max=1.)
+
+        # J3
+        # Iter1
+        r3_iter1 = self.j3(f3)
+        r3 = F.upsample(r3_iter1, size=x0.size()[2:], mode='bilinear')
+        x_j3_iter1 = torch.exp(-torch.exp(log_log_x0_inverse + r3)).clamp(min=0., max=1.)
+        # Iter2
+        f3_t_j = torch.cat((f3, r3_iter1.detach().clone(), x_j3_iter1.detach().clone()), dim=1)
+        r3_iter2 = self.j3_iter(f3_t_j)
+        r3 = F.upsample(r3_iter2, size=x0.size()[2:], mode='bilinear')
+        x_j3_iter2 = torch.exp(-torch.exp(log_log_x0_inverse + r3)).clamp(min=0., max=1.)
+        # Iter3
+        f3_t_j = torch.cat((f3, r3_iter2.detach().clone(), x_j3_iter2.detach().clone()), dim=1)
+        r3_iter3 = self.j3_iter(f3_t_j)
+        r3 = F.upsample(r3_iter3, size=x0.size()[2:], mode='bilinear')
+        x_j3_iter3 = torch.exp(-torch.exp(log_log_x0_inverse + r3)).clamp(min=0., max=1.)
+
 
         # J4 = log(1 + I * R4)
-        r4 = F.upsample(self.j4(f4), size=x0.size()[2:], mode='bilinear')
-        # x_j4 = (torch.log(1 + r4 * x0)).clamp(min=0, max=1)
-        x_j4 = (torch.log(1 + torch.exp(log_x0 + r4))).clamp(min=0., max=1.)
+        # Iter1
+        r4_iter1 = self.j4(f4)
+        r4 = F.upsample(r4_iter1, size=x0.size()[2:], mode='bilinear')
+        x_j4_iter1 = (torch.log(1 + torch.exp(log_x0 + r4))).clamp(min=0., max=1.)
+        # Iter2
+        f4_t_j = torch.cat((f4, r4_iter1.detach().clone(), x_j4_iter1.detach().clone()), dim=1)
+        r4_iter2 = self.j4_iter(f4_t_j)
+        r4 = F.upsample(r4_iter2, size=x0.size()[2:], mode='bilinear')
+        x_j4_iter2 = (torch.log(1 + torch.exp(log_x0 + r4))).clamp(min=0., max=1.)
+        # Iter3
+        f4_t_j = torch.cat((f4, r4_iter2.detach().clone(), x_j4_iter2.detach().clone()), dim=1)
+        r4_iter3 = self.j4_iter(f4_t_j)
+        r4 = F.upsample(r4_iter3, size=x0.size()[2:], mode='bilinear')
+        x_j4_iter3 = (torch.log(1 + torch.exp(log_x0 + r4))).clamp(min=0., max=1.)
+
 
         attention_fusion = F.upsample(self.attention_fusion(concat), size=x0.size()[2:], mode='bilinear')
         x_f0 = torch.sum(F.softmax(attention_fusion[:, :5, :, :], 1) *
-                         torch.stack((x_phy[:, 0, :, :], x_j1[:, 0, :, :], x_j2[:, 0, :, :],
-                                      x_j3[:, 0, :, :], x_j4[:, 0, :, :]), 1), 1, True)
+                         torch.stack((x_phy_iter3[:, 0, :, :], x_j1_iter3[:, 0, :, :], x_j2_iter3[:, 0, :, :],
+                                      x_j3_iter3[:, 0, :, :], x_j4_iter3[:, 0, :, :]), 1), 1, True)
         x_f1 = torch.sum(F.softmax(attention_fusion[:, 5: 10, :, :], 1) *
-                         torch.stack((x_phy[:, 1, :, :], x_j1[:, 1, :, :], x_j2[:, 1, :, :],
-                                      x_j3[:, 1, :, :], x_j4[:, 1, :, :]), 1), 1, True)
+                         torch.stack((x_phy_iter3[:, 1, :, :], x_j1_iter3[:, 1, :, :], x_j2_iter3[:, 1, :, :],
+                                      x_j3_iter3[:, 1, :, :], x_j4_iter3[:, 1, :, :]), 1), 1, True)
         x_f2 = torch.sum(F.softmax(attention_fusion[:, 10:, :, :], 1) *
-                         torch.stack((x_phy[:, 2, :, :], x_j1[:, 2, :, :], x_j2[:, 2, :, :],
-                                      x_j3[:, 2, :, :], x_j4[:, 2, :, :]), 1), 1, True)
+                         torch.stack((x_phy_iter3[:, 2, :, :], x_j1_iter3[:, 2, :, :], x_j2_iter3[:, 2, :, :],
+                                      x_j3_iter3[:, 2, :, :], x_j4_iter3[:, 2, :, :]), 1), 1, True)
         x_fusion = torch.cat((x_f0, x_f1, x_f2), 1).clamp(min=0., max=1.)
 
         if self.training:
-            return x_fusion, x_phy, x_j1, x_j2, x_j3, x_j4, t, a.view(x.size(0), -1)
+            return x_fusion, x_phy_iter3, x_j1_iter3, x_j2_iter3, x_j3_iter3, x_j4_iter3, t, a_iter3.view(x.size(0), -1)
         else:
             return x_fusion
 

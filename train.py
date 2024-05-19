@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument('--ckpt-path', default='./ckpt', help='checkpoint path')
     parser.add_argument(
         '--exp-name',
-        default='RESIDE_ITS',
+        default='RESIDE_ITS_LDP',
         help='experiment name.')
     args = parser.parse_args()
 
@@ -42,7 +42,7 @@ cfgs = {
     'weight_decay': 0,
     'momentum': 0.9,
     'snapshot': '',
-    'val_freq': 5000,
+    'val_freq': 2000,
     'crop_size': 256
 }
 
