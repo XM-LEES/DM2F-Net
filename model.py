@@ -1259,11 +1259,11 @@ class DM2FNet_woPhy(Base_OHAZE):
         # J0 = I * exp(R0)
         # Iter1
         r0_iter1 = self.p0_iter1(f)
-        x_p0_iter1 = torch.exp(f + r0_iter1)
+        x_p0_iter1 = torch.exp(f + r0_iter1).clamp(min=0., max=1.)
         # Iter2
         f0_t_j = torch.cat((f, r0_iter1.detach().clone(), x_p0_iter1.detach().clone()), dim=1)
         r0_iter2 = self.p0_iter2(f0_t_j)
-        x_p0_iter2 = torch.exp(f + r0_iter2)
+        x_p0_iter2 = torch.exp(f + r0_iter2).clamp(min=0., max=1.)
         # Iter3
         f0_t_j = torch.cat((f, r0_iter2.detach().clone(), x_p0_iter2.detach().clone()), dim=1)
         r0_iter3 = self.p0_iter3(f0_t_j)
