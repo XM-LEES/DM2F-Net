@@ -35,7 +35,7 @@ def parse_args():
 
 cfgs = {
     'use_physical': True,
-    'iter_num': 20000,
+    'iter_num': 30000,
     'train_batch_size': 16,
     'last_iter': 0,
     'lr': 2e-4,
@@ -168,7 +168,7 @@ def validate(net, curr_iter, optimizer):
                 g = gt[i].cpu().numpy().transpose([1, 2, 0])
                 psnr = peak_signal_noise_ratio(g, r)
                 ssim = structural_similarity(g, r, data_range=1, multichannel=True,
-                                             gaussian_weights=True, sigma=1.5, use_sample_covariance=False)
+                                             gaussian_weights=True, sigma=1.5, use_sample_covariance=False, channel_axis=2)
                 psnr_record.update(psnr)
                 ssim_record.update(ssim)
 
@@ -200,6 +200,6 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=1)
 
     criterion = nn.L1Loss().cuda()
-    log_path = os.path.join(args.ckpt_path, args.exp_name, str(datetime.datetime.now()) + '.txt')
+    log_path = os.path.join(args.ckpt_path, args.exp_name, '0.txt')
 
     main()

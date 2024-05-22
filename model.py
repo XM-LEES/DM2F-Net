@@ -1263,7 +1263,7 @@ class DM2FNet_woPhy(Base_OHAZE):
         # Iter2
         f0_t_j = torch.cat((f, r0_iter1.detach().clone(), x_p0_iter1.detach().clone()), dim=1)
         r0_iter2 = self.p0_iter2(f0_t_j)
-        x_p0_iter2 = torch.exp(f0_t_j + r0_iter2)
+        x_p0_iter2 = torch.exp(f + r0_iter2)
         # Iter3
         f0_t_j = torch.cat((f, r0_iter2.detach().clone(), x_p0_iter2.detach().clone()), dim=1)
         r0_iter3 = self.p0_iter3(f0_t_j)
@@ -1306,12 +1306,12 @@ class DM2FNet_woPhy(Base_OHAZE):
         x_p3_iter1 = torch.exp(-torch.exp(f + r3_iter1)).clamp(min=0, max=1)
         # Iter2
         f3_t_j = torch.cat((f, r3_iter1.detach().clone(), x_p3_iter1.detach().clone()), dim=1)
-        r3_iter2 = self.p3_iter1(f3_t_j)
+        r3_iter2 = self.p3_iter2(f3_t_j)
         x_p3_iter2 = torch.exp(-torch.exp(f + r3_iter2)).clamp(min=0, max=1)
         # Iter3
         f3_t_j = torch.cat((f, r3_iter2.detach().clone(), x_p3_iter2.detach().clone()), dim=1)
-        r3_iter3 = self.p3_iter2(f3_t_j)
-        x_p3 = torch.exp(-torch.exp(log_log_x0_inverse + r3_iter3)).clamp(min=0, max=1)
+        r3_iter3 = self.p3_iter3(f3_t_j)
+        x_p3 = torch.exp(-torch.exp(log_log_x0_inverse + F.upsample(r3_iter3, size=x0.size()[2:], mode='bilinear'))).clamp(min=0, max=1)
 
 
         attention_fusion = F.upsample(self.attentional_fusion(f), size=x0.size()[2:], mode='bilinear')
