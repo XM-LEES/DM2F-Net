@@ -19,17 +19,18 @@ torch.manual_seed(2018)
 torch.cuda.set_device(0)
 
 ckpt_path = './ckpt'
-exp_name = 'RESIDE_ITS'
-# exp_name = 'O-Haze'
+# exp_name = 'RESIDE_ITS'
+exp_name = 'O-Haze'
 
 args = {
-    'snapshot': 'iter_40000_loss_0.01170_lr_0.000000',
+    'snapshot': 'iter_28000_loss_0.04724_lr_0.000017',
+    # 'snapshot': 'iter_30000_loss_0.04724_lr_0.000000',
 }
 
 to_test = {
     # 'SOTS': TEST_SOTS_ROOT,
-    # 'O-Haze': OHAZE_ROOT,
-    'HazeRD': HAZERD_ROOT,
+    'O-Haze': OHAZE_ROOT,
+    # 'HazeRD': HAZERD_ROOT,
 }
 
 to_pil = transforms.ToPILImage()

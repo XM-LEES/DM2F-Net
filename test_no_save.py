@@ -12,8 +12,20 @@ from model import DM2FNet, DM2FNet_woPhy
 from datasets import SotsDataset, OHazeDataset, HazeRDDataset
 from torch.utils.data import DataLoader
 from skimage.metrics import peak_signal_noise_ratio, structural_similarity, mean_squared_error
+import colour
 
-
+def ciede2000_metric(img1, img2):
+    """
+    Compute the CIEDE2000 color difference between two images.
+    """
+    # Convert images from RGB to Lab color space as CIEDE2000 requires Lab inputs
+    img1_lab = colour.RGB_to_CIELab(img1)
+    img2_lab = colour.RGB_to_CIELab(img2)
+    
+    # Compute CIEDE2000 difference
+    delta_e = colour.delta_E_CIE2000(img1_lab, img2_lab)
+    
+    return np.mean(delta_e)  # Returning the mean CIEDE2000 score across the image
 
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
@@ -22,15 +34,21 @@ torch.manual_seed(2018)
 torch.cuda.set_device(0)
 
 ckpt_path = './ckpt'
-exp_name = 'RESIDE_ITS_LDP'
-# exp_name = 'O-Haze'
+# exp_name = 'RESIDE_ITS_LDP'
+exp_name = 'O-Haze'
 
 args = {
+    'snapshot': 'iter_28000_loss_0.04724_lr_0.000017',
+    # 'snapshot': 'iter_30000_loss_0.04724_lr_0.000000',
+
+
     # 'snapshot': 'iter_2000_loss_0.03465_lr_0.000477',
     # 'snapshot': 'iter_4000_loss_0.02477_lr_0.000455',
     # 'snapshot': 'iter_6000_loss_0.02056_lr_0.000432',
     # 'snapshot': 'iter_8000_loss_0.02018_lr_0.000409',
-    'snapshot': 'iter_10000_loss_0.01882_lr_0.000386',
+
+    # 'snapshot': 'iter_10000_loss_0.01882_lr_0.000386',
+
     # 'snapshot': 'iter_12000_loss_0.02151_lr_0.000363',
     # 'snapshot': 'iter_14000_loss_0.01666_lr_0.000339',
     # 'snapshot': 'iter_16000_loss_0.01553_lr_0.000316',
@@ -50,7 +68,7 @@ args = {
 
 to_test = {
     # 'SOTS': TEST_SOTS_ROOT,
-    'HazeRD': HAZERD_ROOT,
+    # 'HazeRD': HAZERD_ROOT,
     'O-Haze': OHAZE_ROOT,
 }
 
@@ -67,7 +85,7 @@ def main():
                 dataset = SotsDataset(root)
             elif 'O-Haze' in name:
                 # net = DM2FNet_woPhy().cuda()
-                net = DM2FNet().cuda()
+                net = DM2FNet_woPhy().cuda()
                 dataset = OHazeDataset(root, '')
             elif 'HazeRD' in name:
                 net = DM2FNet().cuda()
@@ -77,77 +95,71 @@ def main():
 
         #     # net = nn.DataParallel(net)
 
+            if len(args['snapshot']) > 0:
+                print('load snapshot \'%s\' for testing' % args['snapshot'])
+                net.load_state_dict(torch.load(os.path.join(ckpt_path, exp_name, args['snapshot'] + '.pth')))
 
+            net.eval()
+            dataloader = DataLoader(dataset, batch_size=1)
 
-            for arg in ['iter_2000_loss_0.03465_lr_0.000477', 'iter_4000_loss_0.02477_lr_0.000455', 'iter_6000_loss_0.02056_lr_0.000432', 'iter_8000_loss_0.02018_lr_0.000409', 
-                               'iter_10000_loss_0.01882_lr_0.000386', 'iter_12000_loss_0.02151_lr_0.000363', 'iter_14000_loss_0.01666_lr_0.000339', 'iter_16000_loss_0.01553_lr_0.000316',
-                               'iter_18000_loss_0.01595_lr_0.000292', 'iter_20000_loss_0.01554_lr_0.000268', 'iter_22000_loss_0.01464_lr_0.000244', 'iter_24000_loss_0.01288_lr_0.000219', 
-                               'iter_26000_loss_0.01384_lr_0.000194', 'iter_28000_loss_0.01337_lr_0.000169', 'iter_30000_loss_0.01315_lr_0.000144', 'iter_32000_loss_0.01461_lr_0.000117',
-                                'iter_34000_loss_0.01279_lr_0.000091', 'iter_36000_loss_0.01237_lr_0.000063', 'iter_38000_loss_0.01227_lr_0.000034']:
-                args['snapshot'] = arg
+            mses, psnrs, ssims, ciede2000s = [], [], [], []
+            loss_record = AvgMeter()
 
+            for idx, data in enumerate(dataloader):
+                # haze_image, _, _, _, fs = data
+                haze, gts, fs = data
+                # print(haze.shape, gts.shape)
 
-                if len(args['snapshot']) > 0:
-                    print('load snapshot \'%s\' for testing' % args['snapshot'])
-                    net.load_state_dict(torch.load(os.path.join(ckpt_path, exp_name, args['snapshot'] + '.pth')))
+                check_mkdir(os.path.join(ckpt_path, exp_name,
+                                        '(%s) %s_%s' % (exp_name, name, args['snapshot'])))
 
-                net.eval()
-                dataloader = DataLoader(dataset, batch_size=1)
+                haze = haze.cuda()
 
-                mses, psnrs, ssims, ciede2000s = [], [], [], []
-                loss_record = AvgMeter()
+                if 'O-Haze' in name:
+                    res = sliding_forward(net, haze).detach()
+                else:
+                    res = net(haze).detach()
 
-                for idx, data in enumerate(dataloader):
-                    # haze_image, _, _, _, fs = data
-                    haze, gts, fs = data
-                    # print(haze.shape, gts.shape)
+                loss = criterion(res, gts.cuda())
+                loss_record.update(loss.item(), haze.size(0))
 
-                    check_mkdir(os.path.join(ckpt_path, exp_name,
-                                            '(%s) %s_%s' % (exp_name, name, args['snapshot'])))
+                for i in range(len(fs)):
+                    r = res[i].cpu().numpy().transpose([1, 2, 0])
+                    gt = gts[i].cpu().numpy().transpose([1, 2, 0])
+                    
+                    # Additions
+                    mse = mean_squared_error(gt, r)
+                    mses.append(mse)
+                    
+                    psnr = peak_signal_noise_ratio(gt, r)
+                    psnrs.append(psnr)
+                    ssim = structural_similarity(gt, r, data_range=1, multichannel=True,
+                                                gaussian_weights=True, sigma=1.5, use_sample_covariance=False, channel_axis=2)
+                    ssims.append(ssim)
+                    # ciede2000 = ciede2000_metric(r, gt)
+                    # ciede2000s.append(ciede2000)
+                    ciede2000 = 0
+                    
+                    # print('predicting for {} ({}/{}) [{}]: MSE {:.4f}, PSNR {:.4f}, SSIM {:.4f}, CIEDE2000 {:.4f}'
+                    #       .format(name, idx + 1, len(dataloader), fs[i], mse, psnr, ssim, ciede2000))
+                    log = f'predicting for {name} ({idx + 1}/{len(dataloader)}) [{fs[i]}]: MSE {mse:.4f}, PSNR {psnr:.4f}, SSIM {ssim:.4f}, CIEDE2000 {ciede2000:.4f}'
+                    
+                    
+                    log_path = os.path.join(ckpt_path, exp_name,
+                                            '(%s) %s_%s' % (exp_name, name, args['snapshot']), f'{args["snapshot"]}_{name}_result.txt')
+                    open(log_path, 'a').write(log + '\n')
 
-                    haze = haze.cuda()
+                # for r, f in zip(res.cpu(), fs):
+                #     to_pil(r).save(
+                #         os.path.join(ckpt_path, exp_name,
+                #                      '(%s) %s_%s' % (exp_name, name, args['snapshot']), '%s.png' % f))
 
-                    if 'O-Haze' in name:
-                        res = sliding_forward(net, haze).detach()
-                    else:
-                        res = net(haze).detach()
-
-                    loss = criterion(res, gts.cuda())
-                    loss_record.update(loss.item(), haze.size(0))
-
-                    for i in range(len(fs)):
-                        r = res[i].cpu().numpy().transpose([1, 2, 0])
-                        gt = gts[i].cpu().numpy().transpose([1, 2, 0])
-                        
-                        # Additions
-                        mse = mean_squared_error(gt, r)
-                        mses.append(mse)
-                        
-                        psnr = peak_signal_noise_ratio(gt, r)
-                        psnrs.append(psnr)
-                        ssim = structural_similarity(gt, r, data_range=1, multichannel=True,
-                                                    gaussian_weights=True, sigma=1.5, use_sample_covariance=False, channel_axis=2)
-                        ssims.append(ssim)
-                        # print('predicting for {} ({}/{}) [{}]: MSE {:.4f}, PSNR {:.4f}, SSIM {:.4f}'
-                        #       .format(name, idx + 1, len(dataloader), fs[i], mse, psnr, ssim))
-                        log = f'predicting for {name} ({idx + 1}/{len(dataloader)}) [{fs[i]}]: MSE {mse:.4f}, PSNR {psnr:.4f}, SSIM {ssim:.4f}'
-                        
-                        
-                        log_path = os.path.join(ckpt_path, exp_name,
-                                                '(%s) %s_%s' % (exp_name, name, args['snapshot']), f'{args["snapshot"]}_{name}_result.txt')
-                        open(log_path, 'a').write(log + '\n')
-
-                    # for r, f in zip(res.cpu(), fs):
-                    #     to_pil(r).save(
-                    #         os.path.join(ckpt_path, exp_name,
-                    #                      '(%s) %s_%s' % (exp_name, name, args['snapshot']), '%s.png' % f))
-
-                print(f"[{name}] L1: {loss_record.avg:.6f}, MSE: {np.mean(mses):.6f}, PSNR: {np.mean(psnrs):.6f}, SSIM: {np.mean(ssims):.6f}")
-                
-                log = f"[{name}] L1: {loss_record.avg:.6f}, MSE: {np.mean(mses):.6f}, PSNR: {np.mean(psnrs):.6f}, SSIM: {np.mean(ssims):.6f}"
-                log_path = os.path.join(ckpt_path, exp_name,
-                                                '(%s) %s_%s' % (exp_name, name, args['snapshot']), f'{args["snapshot"]}_{name}_avg_result.txt')
-                open(log_path, 'a').write(log + '\n')
+            print(f"[{name}] L1: {loss_record.avg:.6f}, MSE: {np.mean(mses):.6f}, PSNR: {np.mean(psnrs):.6f}, SSIM: {np.mean(ssims):.6f}, CIEDE2000: {np.mean(ciede2000s):.6f}")
+            
+            log = f"[{name}] L1: {loss_record.avg:.6f}, MSE: {np.mean(mses):.6f}, PSNR: {np.mean(psnrs):.6f}, SSIM: {np.mean(ssims):.6f}, CIEDE2000: {np.mean(ciede2000s):.6f}"
+            log_path = os.path.join(ckpt_path, exp_name,
+                                            '(%s) %s_%s' % (exp_name, name, args['snapshot']), f'{args["snapshot"]}_{name}_avg_result.txt')
+            open(log_path, 'a').write(log + '\n')
 
 if __name__ == '__main__':
     main()
