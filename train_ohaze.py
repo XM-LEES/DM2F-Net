@@ -10,6 +10,8 @@ from torch import optim
 from torch.backends import cudnn
 from torch.utils.data import DataLoader
 import torch.cuda.amp as amp
+import torch.nn.functional as F
+from torchvision import models
 
 from model import DM2FNet_woPhy
 from tools.config import OHAZE_ROOT
@@ -35,18 +37,30 @@ def parse_args():
 
 cfgs = {
     'use_physical': True,
-    'iter_num': 30000,
+    'iter_num': 10000,
     'train_batch_size': 16,
     'last_iter': 0,
     'lr': 2e-4,
     'lr_decay': 0.9,
     'weight_decay': 2e-5,
     'momentum': 0.9,
-    'snapshot': '',
+    'snapshot': 'iter_14000_loss_0.04829_lr_0.000114',
     'val_freq': 2000,
     'crop_size': 512,
 }
 
+class VGGPerceptualLoss(nn.Module):
+    def __init__(self):
+        super(VGGPerceptualLoss, self).__init__()
+        vgg = models.vgg16(pretrained=True).features
+        self.slice1 = vgg[:4]  # 使用VGG的第一部分作为特征提取器
+        for p in self.parameters():
+            p.requires_grad = False
+
+    def forward(self, x, y):
+        x_vgg, y_vgg = self.slice1(x), self.slice1(y)
+        loss = F.l1_loss(x_vgg, y_vgg)
+        return loss
 
 def main():
     net = DM2FNet_woPhy().cuda().train()
@@ -87,6 +101,7 @@ def train(net, optimizer):
         loss_x_jf_record = AvgMeter()
         loss_x_j1_record, loss_x_j2_record = AvgMeter(), AvgMeter()
         loss_x_j3_record, loss_x_j4_record = AvgMeter(), AvgMeter()
+        loss_P_record = AvgMeter()
 
         for data in train_loader:
             optimizer.param_groups[0]['lr'] = 2 * cfgs['lr'] * (1 - float(curr_iter) / cfgs['iter_num']) \
@@ -110,8 +125,9 @@ def train(net, optimizer):
                 loss_x_j2 = criterion(x_j2, gt)
                 loss_x_j3 = criterion(x_j3, gt)
                 loss_x_j4 = criterion(x_j4, gt)
+                loss_P = criterion_p(x_jf, gt)
 
-                loss = loss_x_jf + loss_x_j1 + loss_x_j2 + loss_x_j3 + loss_x_j4
+                loss = loss_x_jf + loss_x_j1 + loss_x_j2 + loss_x_j3 + loss_x_j4 + loss_P
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)
@@ -127,13 +143,14 @@ def train(net, optimizer):
             loss_x_j2_record.update(loss_x_j2.item(), batch_size)
             loss_x_j3_record.update(loss_x_j3.item(), batch_size)
             loss_x_j4_record.update(loss_x_j4.item(), batch_size)
+            loss_P_record.update(loss_P.item(), batch_size)
 
             curr_iter += 1
 
             log = '[iter %d], [train loss %.5f], [loss_x_fusion %.5f], [loss_x_j1 %.5f], ' \
-                  '[loss_x_j2 %.5f], [loss_x_j3 %.5f], [loss_x_j4 %.5f], [lr %.13f]' % \
+                  '[loss_x_j2 %.5f], [loss_x_j3 %.5f], [loss_x_j4 %.5f], [loss_p %.5f], [lr %.13f]' % \
                   (curr_iter, train_loss_record.avg, loss_x_jf_record.avg,
-                   loss_x_j1_record.avg, loss_x_j2_record.avg, loss_x_j3_record.avg, loss_x_j4_record.avg,
+                   loss_x_j1_record.avg, loss_x_j2_record.avg, loss_x_j3_record.avg, loss_x_j4_record.avg, loss_P_record.avg,
                    optimizer.param_groups[1]['lr'])
             print(log)
             open(log_path, 'a').write(log + '\n')
@@ -200,6 +217,7 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=1)
 
     criterion = nn.L1Loss().cuda()
+    criterion_p = VGGPerceptualLoss().cuda()
     log_path = os.path.join(args.ckpt_path, args.exp_name, '0.txt')
 
     main()

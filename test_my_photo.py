@@ -19,23 +19,22 @@ torch.manual_seed(2018)
 torch.cuda.set_device(0)
 
 ckpt_path = './ckpt'
-exp_name = 'RESIDE_ITS'
+exp_name = 'RESIDE_ITS_LOSS'
 # exp_name = 'O-Haze'
 
-args = {
-    # 'snapshot': 'iter_5000_loss_0.02125_lr_0.000443',
-    # 'snapshot': 'iter_10000_loss_0.03119_lr_0.000386',
-    # 'snapshot': 'iter_15000_loss_0.01642_lr_0.000328',
-    # 'snapshot': 'iter_20000_loss_0.01551_lr_0.000268',
-    # 'snapshot': 'iter_25000_loss_0.01520_lr_0.000207',
-    # 'snapshot': 'iter_30000_loss_0.01328_lr_0.000144',
-    # 'snapshot': 'iter_35000_loss_0.01285_lr_0.000077',
-    'snapshot': 'iter_40000_loss_0.01170_lr_0.000000',
+pth = {
+    'snapshot1': 'iter_14000_loss_0.01685_lr_0.000339',
+    'snapshot2': 'iter_16000_loss_0.01672_lr_0.000316',
+    'snapshot3': 'iter_18000_loss_0.01579_lr_0.000292',
+    'snapshot4': 'iter_20000_loss_0.01750_lr_0.000268',
+    'snapshot5': 'iter_22000_loss_0.01520_lr_0.000244',
+    'snapshot6': 'iter_24000_loss_0.01475_lr_0.000219',
+    'snapshot7': 'iter_26000_loss_0.01494_lr_0.000194',
+    'snapshot8': 'iter_28000_loss_0.01381_lr_0.000169',
+    'snapshot9': 'iter_30000_loss_0.01353_lr_0.000144',
 }
 
 to_test = {
-    # 'SOTS': TEST_SOTS_ROOT,
-    # 'O-Haze': OHAZE_ROOT,
     'MyHaze': MYHAZE_ROOT,
 }
 
@@ -44,53 +43,41 @@ to_pil = transforms.ToPILImage()
 
 def main():
     with torch.no_grad():
-        criterion = nn.L1Loss().cuda()
-
         for name, root in to_test.items():
-            if 'SOTS' in name:
-                net = DM2FNet().cuda()
-                dataset = SotsDataset(root)
-            elif 'O-Haze' in name:
-                net = DM2FNet_woPhy().cuda()
-                dataset = OHazeDataset(root, '')
-            elif 'MyHaze' in name:
+            if 'MyHaze' in name:
                 net = DM2FNet().cuda()
                 dataset = MyHazeDataset(root)
             else:
                 raise NotImplementedError
 
-            # net = nn.DataParallel(net)
+            args = {}
+            for i in range(len(pth)):
+                print (i)
+                args['snapshot'] = pth[f'snapshot{i + 1}']
+                
+                if len(args['snapshot']) > 0:
+                    print('load snapshot \'%s\' for testing' % args['snapshot'])
+                    net.load_state_dict(torch.load(os.path.join(ckpt_path, exp_name, args['snapshot'] + '.pth')))
 
-            if len(args['snapshot']) > 0:
-                print('load snapshot \'%s\' for testing' % args['snapshot'])
-                net.load_state_dict(torch.load(os.path.join(ckpt_path, exp_name, args['snapshot'] + '.pth')))
+                net.eval()
+                dataloader = DataLoader(dataset, batch_size=1)
 
-            net.eval()
-            dataloader = DataLoader(dataset, batch_size=1)
+                for idx, data in enumerate(dataloader):
+                    haze, fs = data
 
-            psnrs, ssims = [], []
-            loss_record = AvgMeter()
+                    check_mkdir(os.path.join(ckpt_path, exp_name,
+                                            '(%s) %s_%s' % (exp_name, name, args['snapshot'])))
+                    haze = haze.cuda()
 
-            for idx, data in enumerate(dataloader):
-                # haze_image, _, _, _, fs = data
-                haze, fs = data
-                # print(haze.shape, gts.shape)
+                    if 'O-Haze' in name:
+                        res = sliding_forward(net, haze).detach()
+                    else:
+                        res = net(haze).detach()
 
-                check_mkdir(os.path.join(ckpt_path, exp_name,
-                                         '(%s) %s_%s' % (exp_name, name, args['snapshot'])))
-
-                haze = haze.cuda()
-
-                if 'O-Haze' in name:
-                    res = sliding_forward(net, haze).detach()
-                else:
-                    res = net(haze).detach()
-
-                for r, f in zip(res.cpu(), fs):
-                    to_pil(r).save(
-                        os.path.join(ckpt_path, exp_name,
-                                     '(%s) %s_%s' % (exp_name, name, args['snapshot']), '%s.png' % f))
-
+                    for r, f in zip(res.cpu(), fs):
+                        to_pil(r).save(
+                            os.path.join(ckpt_path, exp_name,
+                                        '(%s) %s_%s' % (exp_name, name, args['snapshot']), '%s.png' % f))
 
 if __name__ == '__main__':
     main()

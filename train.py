@@ -4,11 +4,14 @@ import os
 import datetime
 from tqdm import tqdm
 
+import numpy as np
 import torch
 from torch import nn
 from torch import optim
 from torch.backends import cudnn
 from torch.utils.data import DataLoader
+import torch.nn.functional as F
+from torchvision import models
 
 from model import DM2FNet
 from tools.config import TRAIN_ITS_ROOT, TEST_SOTS_ROOT
@@ -25,7 +28,7 @@ def parse_args():
     parser.add_argument('--ckpt-path', default='./ckpt', help='checkpoint path')
     parser.add_argument(
         '--exp-name',
-        default='RESIDE_ITS_LDP',
+        default='RESIDE_ITS_LOSS_3',
         help='experiment name.')
     args = parser.parse_args()
 
@@ -45,6 +48,41 @@ cfgs = {
     'val_freq': 2000,
     'crop_size': 256
 }
+
+# class PerceptualLoss(nn.Module):
+#     def __init__(self):
+#         super(PerceptualLoss, self).__init__()
+#         vgg = models.vgg16(pretrained=True).features
+#         self.slice1 = vgg[:4]  # 使用VGG的第一部分作为特征提取器
+#         for p in self.parameters():
+#             p.requires_grad = False
+
+#     def forward(self, x, y):
+#         x_vgg, y_vgg = self.slice1(x), self.slice1(y)
+#         loss = F.l1_loss(x_vgg, y_vgg)
+#         return loss
+
+class PerceptualLoss(nn.Module):
+    def __init__(self):
+        super(PerceptualLoss, self).__init__()
+        vgg = models.vgg16(pretrained=True).features
+        self.slice1 = vgg[:4]  # 使用VGG的第一部分作为特征提取器
+        self.slice2 = vgg[4:9]  # 使用VGG的第二部分作为特征提取器
+        self.slice3 = vgg[9:16]  # 使用VGG的第三部分作为特征提取器
+        
+        # 冻结这些层的参数
+        for p in self.parameters():
+            p.requires_grad = False
+
+    def forward(self, x, y):
+        # 使用VGG不同部分提取特征
+        x_vgg1, y_vgg1 = self.slice1(x), self.slice1(y)
+        x_vgg2, y_vgg2 = self.slice2(x_vgg1), self.slice2(y_vgg1)
+        x_vgg3, y_vgg3 = self.slice3(x_vgg2), self.slice3(x_vgg2)
+
+        # 计算每个部分的L1损失并相加
+        loss = F.l1_loss(x_vgg1, y_vgg1) + F.l1_loss(x_vgg2, y_vgg2) + F.l1_loss(x_vgg3, y_vgg3)
+        return loss
 
 
 def main():
@@ -85,6 +123,7 @@ def train(net, optimizer):
         loss_x_j1_record, loss_x_j2_record = AvgMeter(), AvgMeter()
         loss_x_j3_record, loss_x_j4_record = AvgMeter(), AvgMeter()
         loss_t_record, loss_a_record = AvgMeter(), AvgMeter()
+        loss_P_record = AvgMeter()
 
         for data in train_loader:
             optimizer.param_groups[0]['lr'] = 2 * cfgs['lr'] * (1 - float(curr_iter) / cfgs['iter_num']) \
@@ -111,12 +150,12 @@ def train(net, optimizer):
             loss_x_j2 = criterion(x_j2, gt)
             loss_x_j3 = criterion(x_j3, gt)
             loss_x_j4 = criterion(x_j4, gt)
+            loss_P = criterion_p(x_jf, gt)
 
             loss_t = criterion(t, gt_trans_map)
             loss_a = criterion(a, gt_ato)
 
-            loss = loss_x_jf + loss_x_j0 + loss_x_j1 + loss_x_j2 + loss_x_j3 + loss_x_j4 \
-                   + 10 * loss_t + loss_a
+            loss = loss_x_jf + loss_x_j0 + loss_x_j1 + loss_x_j2 + loss_x_j3 + loss_x_j4 + 10 * loss_t + loss_a + loss_P
             loss.backward()
 
             optimizer.step()
@@ -134,14 +173,16 @@ def train(net, optimizer):
             loss_t_record.update(loss_t.item(), batch_size)
             loss_a_record.update(loss_a.item(), batch_size)
 
+            loss_P_record.update(loss_P.item(), batch_size)
             curr_iter += 1
 
             log = '[iter %d], [train loss %.5f], [loss_x_fusion %.5f], [loss_x_phy %.5f], [loss_x_j1 %.5f], ' \
                   '[loss_x_j2 %.5f], [loss_x_j3 %.5f], [loss_x_j4 %.5f], [loss_t %.5f], [loss_a %.5f], ' \
+                  '[loss_p %.5f]' \
                   '[lr %.13f]' % \
                   (curr_iter, train_loss_record.avg, loss_x_jf_record.avg, loss_x_j0_record.avg,
                    loss_x_j1_record.avg, loss_x_j2_record.avg, loss_x_j3_record.avg, loss_x_j4_record.avg,
-                   loss_t_record.avg, loss_a_record.avg, optimizer.param_groups[1]['lr'])
+                   loss_t_record.avg, loss_a_record.avg, loss_P_record.avg, optimizer.param_groups[1]['lr'])
             print(log)
             open(log_path, 'a').write(log + '\n')
 
@@ -195,6 +236,8 @@ if __name__ == '__main__':
     val_loader = DataLoader(val_dataset, batch_size=8)
 
     criterion = nn.L1Loss().cuda()
+    criterion_p = PerceptualLoss().cuda()
     log_path = os.path.join(args.ckpt_path, args.exp_name, '0.txt')
+
 
     main()

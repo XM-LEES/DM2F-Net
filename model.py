@@ -803,23 +803,6 @@ class DM2FNet(Base):
             nn.Conv2d(num_features, num_features, kernel_size=1)
         )
 
-        self.j1 = nn.Sequential(
-            nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features // 2, 3, kernel_size=1)
-        )
-        self.j2 = nn.Sequential(
-            nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features // 2, 3, kernel_size=1)
-        )
-        self.j3 = nn.Sequential(
-            nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features // 2, 3, kernel_size=1)
-        )
-        self.j4 = nn.Sequential(
-            nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features // 2, 3, kernel_size=1)
-        )
-
 
         self.j1_iter1 = nn.Sequential(
             nn.Conv2d(num_features, num_features, kernel_size=3, padding=1), nn.SELU(),
@@ -835,11 +818,11 @@ class DM2FNet(Base):
         )
         self.j2_iter1 = nn.Sequential(
             nn.Conv2d(num_features, num_features, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features, 128, kernel_size=1)
+            nn.Conv2d(num_features, num_features, kernel_size=1)
         )
         self.j2_iter2 = nn.Sequential(
             nn.Conv2d(num_features * 3, num_features, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features, 128, kernel_size=1)
+            nn.Conv2d(num_features, num_features, kernel_size=1)
         )
         self.j2_iter3 = nn.Sequential(
             nn.Conv2d(num_features * 3, num_features, kernel_size=3, padding=1), nn.SELU(),
@@ -1125,31 +1108,15 @@ class DM2FNet_woPhy(Base_OHAZE):
             nn.Conv2d(num_features, num_features, kernel_size=1), nn.Sigmoid()
         )
 
-        self.p0 = nn.Sequential(
-            nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features // 2, 3, kernel_size=1)
-        )
-        self.p1 = nn.Sequential(
-            nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features // 2, 3, kernel_size=1)
-        )
         self.p2_0 = nn.Sequential(
             nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
             nn.Conv2d(num_features // 2, 3, kernel_size=1)
         )
-        self.p2_1 = nn.Sequential(
-            nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features // 2, 3, kernel_size=1)
-        )
+
         self.p3_0 = nn.Sequential(
             nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
             nn.Conv2d(num_features // 2, 3, kernel_size=1)
         )
-        self.p3_1 = nn.Sequential(
-            nn.Conv2d(num_features, num_features // 2, kernel_size=3, padding=1), nn.SELU(),
-            nn.Conv2d(num_features // 2, 3, kernel_size=1)
-        )
-
 
         self.p0_iter1 = nn.Sequential(
             nn.Conv2d(num_features, num_features, kernel_size=3, padding=1), nn.SELU(),
