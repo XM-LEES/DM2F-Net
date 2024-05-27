@@ -19,19 +19,15 @@ torch.manual_seed(2018)
 torch.cuda.set_device(0)
 
 ckpt_path = './ckpt'
-exp_name = 'RESIDE_ITS_LDP'
+exp_name = 'RESIDE_ITS_LOSS'
 # exp_name = 'O-Haze'
 
 args = {
-    # OHaze
-    # 'snapshot': 'iter_26000_loss_0.04799_lr_0.000033',
-    # 'snapshot': 'iter_28000_loss_0.04724_lr_0.000017',
-    # 'snapshot': 'iter_30000_loss_0.04724_lr_0.000000',
+    # RESIDE_ITS_LOSS
+    'snapshot': 'iter_22000_loss_0.01520_lr_0.000244',
 
-    # RESIDE_ITS_LDP
-    # 'snapshot': 'iter_28000_loss_0.01337_lr_0.000169',
-    # 'snapshot': 'iter_30000_loss_0.01315_lr_0.000144',    
-    'snapshot': 'iter_40000_loss_0.01195_lr_0.000000',
+    # O-Haze
+    'snapshot': 'iter_20000_loss_0.04916_lr_0.000088',
 }
 
 to_test = {
